@@ -13,8 +13,10 @@ export async function createLead(fields, ip) {
   const t = Number(fields.t);
   if (t && Date.now() - t < 2500) return { stored: false };
 
-  const name = clip(fields.name, 120);
+  // Two forms post here: the newsletter sign-up and the free consultation request.
+  const type = clip(fields.type, 20) === 'newsletter' ? 'newsletter' : 'consultation';
   const email = clip(fields.email, 200).toLowerCase();
+  const name = clip(fields.name, 120) || (type === 'newsletter' ? email.split('@')[0] : '');
   const phone = clip(fields.phone, 40);
   if (!name) throw new HttpError(400, 'Please enter your name.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new HttpError(400, 'Please enter a valid email address.');
@@ -33,7 +35,11 @@ export async function createLead(fields, ip) {
     name,
     email,
     phone,
-    message: clip(fields.message, 3000),
+    type,
+    // The admin Leads tab shows the message, so the label tells you which form it came from.
+    message: [type === 'newsletter' ? 'Newsletter signup' : 'Free consultation request', clip(fields.message, 3000)]
+      .filter(Boolean)
+      .join(': '),
     postSlug: clip(fields.post_slug, 80),
     postTitle: clip(fields.post_title, 200),
     referrer: clip(fields.referrer, 300),

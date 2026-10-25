@@ -35,19 +35,26 @@ tags: [Alpha, Beta]
 
   const html = await fs.readFile(path.join(out, 'blog/safe-post/index.html'), 'utf8');
   assert.match(html, /<link rel="canonical" href="https:\/\/blog\.test\/blog\/safe-post\/">/);
-  assert.match(html, /<title>Safe &amp; sound &lt;post&gt; \| My Blog<\/title>/);
+  assert.match(html, /<title>Safe &amp; sound &lt;post&gt; \| Alkos<\/title>/);
   assert.match(html, /"@type":"BlogPosting"/);
   assert.match(html, /<form class="lead-form"[^>]+action="\/api\/lead"/);
   assert.ok(!/<script>alert/.test(html), 'raw script tags are escaped');
   assert.ok(!/href="javascript:/i.test(html) && !/src="javascript:/i.test(html), 'javascript: URLs are removed');
   assert.match(html, /href="https:\/\/example\.org" rel="noopener"/);
   assert.match(html, /class="toc"/);
+  assert.match(html, /name="type" value="newsletter"/);
+  assert.match(html, /name="type" value="consultation"/);
+  assert.ok(!/href="\/rss\.xml"/.test(html.replace(/<link[^>]+>/g, '')), 'no visible RSS link');
+  assert.ok(!/>Sitemap</.test(html), 'no visible sitemap link');
   const sitemap = await fs.readFile(path.join(out, 'sitemap.xml'), 'utf8');
   assert.match(sitemap, /blog\.test\/blog\/safe-post\//);
   assert.ok(!sitemap.includes('secret-draft'));
   await assert.rejects(fs.access(path.join(out, 'blog/secret-draft/index.html')));
   const home = await fs.readFile(path.join(out, 'index.html'), 'utf8');
   assert.match(home, /\/blog\/safe-post\//);
+  assert.match(home, /id="subscribe"/);
+  assert.match(home, /id="consultation"/);
+  assert.match(home, /src="\/logo\.png"/);
   assert.match(await fs.readFile(path.join(out, 'robots.txt'), 'utf8'), /Disallow: \/admin\//);
   await fs.access(path.join(out, 'tag/alpha/index.html'));
   await fs.access(path.join(out, 'admin/vendor/marked.umd.js'));

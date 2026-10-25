@@ -16,13 +16,24 @@ export const DEFAULT_CONFIG = {
   url: '',
   language: 'en',
   author: 'Editorial team',
-  accent: '#0e7c66',
+  accent: '#271b09',
+  eyebrow: 'Marketing news and tips',
   postsPerPage: 9,
   footer: '© {year} My Blog',
+  // Newsletter sign-up (the "Subscribe" card)
+  newsletter: {
+    heading: 'Get marketing tips in your inbox',
+    text: 'New marketing news and practical tips, sent when we publish. No spam.',
+    placeholder: 'Your email address',
+    button: 'Subscribe',
+    consent: 'I agree to receive marketing emails. I can unsubscribe at any time.',
+    thankYou: 'You are subscribed. Watch your inbox for our next update.',
+  },
+  // Free consultation (the "Book a call" card)
   lead: {
-    heading: 'Want help with this?',
-    text: 'Leave your details and we will reply within one business day.',
-    button: 'Send my details',
+    heading: 'Book a free consultation with our SEO expert',
+    text: 'Tell us about your business and we will reply within one business day with a time for your free call.',
+    button: 'Register for my free call',
     askPhone: true,
     askMessage: true,
     consent: 'I agree to be contacted about my enquiry.',
@@ -172,13 +183,17 @@ ${jsonld.map(ld).join('\n')}
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap">
-<a class="brand" href="/">${esc(cfg.name)}</a>
-<nav class="site-nav" aria-label="Main"><a href="/">All posts</a><a href="/rss.xml">RSS</a></nav>
+<a class="brand" href="/" aria-label="${esc(cfg.name)} home"><img src="/logo.png" alt="${esc(cfg.name)}" width="700" height="315"></a>
+<nav class="site-nav" aria-label="Main"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a class="nav-cta" href="/#consultation">Free consultation</a></nav>
 </div></header>
 <main id="main">
 ${body}
 </main>
-<footer class="site-foot"><div class="wrap"><span>${footer}</span><span><a href="/rss.xml">RSS</a> &nbsp; <a href="/sitemap.xml">Sitemap</a></span></div></footer>
+<footer class="site-foot"><div class="wrap">
+<div class="foot-brand"><img src="/logo.png" alt="${esc(cfg.name)}" width="700" height="315" loading="lazy"><p>${esc(cfg.tagline)}</p></div>
+<nav class="foot-links" aria-label="Footer"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a href="/#consultation">Free consultation</a></nav>
+<p class="copy">${footer}</p>
+</div></footer>
 ${scripts ? `<script src="${jsPath}" defer></script>` : ''}
 </body>
 </html>
@@ -202,27 +217,105 @@ ${scripts ? `<script src="${jsPath}" defer></script>` : ''}
           .join('')}</div>`
       : '';
 
-  const indexItem = (p, h = 'h2') => `<li>
-<div><time datetime="${p.date}">${esc(fmtDate(p.date))}</time><span class="reading">${p.minutes} min read</span></div>
-<div><${h}><a href="/blog/${p.slug}/">${esc(p.title)}</a></${h}><p>${esc(p.description)}</p>${tagLinks(p)}</div>
-</li>`;
+  // A news-style card: picture (or a branded panel), kicker, title, summary
+  const card = (p, h = 'h3', eager = false) => `<article class="card">
+<a class="card-media" href="/blog/${p.slug}/" tabindex="-1" aria-hidden="true">${
+    p.cover
+      ? `<img src="${esc(p.cover)}" alt="" loading="${eager ? 'eager' : 'lazy'}">`
+      : `<span class="ph">${esc(p.tags[0] || cfg.name)}</span>`
+  }</a>
+<div class="card-body">
+<div class="meta">${p.tags[0] ? `<span class="kicker">${esc(p.tags[0])}</span>` : ''}<time datetime="${p.date}">${esc(fmtDate(p.date))}</time><span>${p.minutes} min read</span></div>
+<${h}><a href="/blog/${p.slug}/">${esc(p.title)}</a></${h}>
+<p>${esc(p.description)}</p>
+<a class="more" href="/blog/${p.slug}/">Read article <span aria-hidden="true">&rarr;</span></a>
+</div>
+</article>`;
+
+  // The two forms: newsletter + free consultation. Shown on the homepage and under every post.
+  const N = cfg.newsletter;
+  const L = cfg.lead;
+  const antiBot = '<p class="hp" aria-hidden="true"><label>Leave this field empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></p>';
+  const ctaSection = (p) => {
+    const source = p
+      ? `<input type="hidden" name="post_slug" value="${esc(p.slug)}"><input type="hidden" name="post_title" value="${esc(p.title)}">`
+      : '';
+    return `<section class="cta" aria-label="Stay in touch"><div class="wrap cta-grid">
+<div class="cta-card cta-light" id="subscribe">
+<p class="eyebrow">Newsletter</p>
+<h2>${esc(N.heading)}</h2>
+<p class="cta-text">${esc(N.text)}</p>
+<form class="lead-form" method="post" action="/api/lead" data-lead>
+<input type="hidden" name="type" value="newsletter">
+${source}
+${antiBot}
+<div class="row">
+<label><span class="sr">Email address</span><input type="email" name="email" required maxlength="200" autocomplete="email" placeholder="${esc(N.placeholder)}"></label>
+<button type="submit">${esc(N.button)}</button>
+</div>
+${N.consent ? `<label class="check"><input type="checkbox" name="consent" value="yes" required><span>${esc(N.consent)}</span></label>` : ''}
+<p class="lead-status" role="status" aria-live="polite"></p>
+</form>
+<p class="lead-done" tabindex="-1" hidden>${esc(N.thankYou)}</p>
+</div>
+<div class="cta-card cta-dark" id="consultation">
+<p class="eyebrow">Free consultation</p>
+<h2>${esc(L.heading)}</h2>
+<p class="cta-text">${esc(L.text)}</p>
+<form class="lead-form" method="post" action="/api/lead" data-lead>
+<input type="hidden" name="type" value="consultation">
+${source}
+${antiBot}
+<label>Your name<input type="text" name="name" required maxlength="120" autocomplete="name"></label>
+<label>Email address<input type="email" name="email" required maxlength="200" autocomplete="email"></label>
+${L.askPhone ? '<label><span>Phone <span class="opt">(optional)</span></span><input type="tel" name="phone" maxlength="40" autocomplete="tel"></label>' : ''}
+${L.askMessage ? '<label><span>Tell us about your business <span class="opt">(optional)</span></span><textarea name="message" maxlength="3000" rows="3"></textarea></label>' : ''}
+${L.consent ? `<label class="check"><input type="checkbox" name="consent" value="yes" required><span>${esc(L.consent)}</span></label>` : ''}
+<button type="submit">${esc(L.button)}</button>
+<p class="lead-status" role="status" aria-live="polite"></p>
+</form>
+<p class="lead-done" tabindex="-1" hidden>${esc(L.thankYou)}</p>
+</div>
+</div></section>`;
+  };
 
   const pageUrl = (base, n) => (n === 1 ? base : `${base}page/${n}/`);
 
-  async function writeListing({ base, title, intro, list, heading, description, jsonld = [] }) {
+  async function writeListing({ base, title, intro, list, heading, description, jsonld = [], home = false }) {
     const per = Math.max(1, Number(cfg.postsPerPage) || 9);
     const pages = Math.max(1, Math.ceil(list.length / per));
     for (let n = 1; n <= pages; n++) {
       const slice = list.slice((n - 1) * per, n * per);
       const pager =
         pages > 1
-          ? `<nav class="pager" aria-label="Pagination"><span>${n > 1 ? `<a rel="prev" href="${pageUrl(base, n - 1)}">Newer posts</a>` : ''}</span><span>Page ${n} of ${pages}</span><span>${n < pages ? `<a rel="next" href="${pageUrl(base, n + 1)}">Older posts</a>` : ''}</span></nav>`
+          ? `<nav class="pager" aria-label="Pagination"><span>${n > 1 ? `<a rel="prev" href="${pageUrl(base, n - 1)}">&larr; Newer posts</a>` : ''}</span><span>Page ${n} of ${pages}</span><span>${n < pages ? `<a rel="next" href="${pageUrl(base, n + 1)}">Older posts &rarr;</a>` : ''}</span></nav>`
           : '';
-      const body = `<div class="wrap">
-<div class="intro"><h1>${esc(heading)}</h1>${intro ? `<p>${esc(intro)}</p>` : ''}</div>
-${slice.length ? `<ol class="index">${slice.map((p) => indexItem(p)).join('\n')}</ol>` : '<p class="empty">No posts yet. Publish your first post from the admin panel.</p>'}
+      const showHome = home && n === 1;
+      const top = showHome
+        ? `<section class="hero"><div class="wrap">
+<p class="eyebrow">${esc(cfg.eyebrow || '')}</p>
+<h1>${esc(heading)}</h1>
+${intro ? `<p class="hero-text">${esc(intro)}</p>` : ''}
+<p class="hero-actions"><a class="btn" href="#consultation">Book a free consultation</a><a class="btn btn-ghost" href="#subscribe">Subscribe to the newsletter</a></p>
+</div></section>`
+        : `<div class="wrap"><div class="intro"><h1>${esc(heading)}</h1>${intro ? `<p>${esc(intro)}</p>` : ''}</div></div>`;
+      let listing;
+      if (!slice.length) {
+        listing = '<p class="empty">No posts yet. Publish your first post from the admin panel.</p>';
+      } else if (showHome) {
+        const [first, ...rest] = slice;
+        listing = `<h2 class="section-title">Latest news</h2>
+<div class="featured">${card(first, 'h3', true)}</div>
+${rest.length ? `<div class="grid">${rest.map((p) => card(p)).join('\n')}</div>` : ''}`;
+      } else {
+        listing = `<div class="grid">${slice.map((p) => card(p, 'h2')).join('\n')}</div>`;
+      }
+      const body = `${top}
+<div class="wrap listing">
+${listing}
 ${pager}
-</div>`;
+</div>
+${showHome ? ctaSection(null) : ''}`;
       await write(
         pageUrl(base, n).replace(/^\//, '') + 'index.html',
         layout({
@@ -231,6 +324,7 @@ ${pager}
           urlPath: pageUrl(base, n),
           noindex: false,
           jsonld: n === 1 ? jsonld : [],
+          scripts: showHome,
           body,
         }),
       );
@@ -239,6 +333,7 @@ ${pager}
 
   await writeListing({
     base: '/',
+    home: true,
     title: cfg.name,
     heading: cfg.tagline || cfg.name,
     intro: cfg.description,
@@ -257,27 +352,6 @@ ${pager}
       description: `All ${cfg.name} posts about ${t.name}.`,
     });
   }
-
-  // Lead form
-  const L = cfg.lead;
-  const leadBlock = (p) => `<section class="lead" id="get-in-touch" aria-labelledby="lead-h"><div class="wrap">
-<div><h2 id="lead-h">${esc(L.heading)}</h2><p class="lead-text">${esc(L.text)}</p></div>
-<div>
-<form class="lead-form" method="post" action="/api/lead" data-lead>
-<input type="hidden" name="post_slug" value="${esc(p.slug)}">
-<input type="hidden" name="post_title" value="${esc(p.title)}">
-<p class="hp" aria-hidden="true"><label>Leave this field empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></p>
-<label>Your name<input type="text" name="name" required maxlength="120" autocomplete="name"></label>
-<label>Email address<input type="email" name="email" required maxlength="200" autocomplete="email"></label>
-${L.askPhone ? '<label><span>Phone <span class="opt">(optional)</span></span><input type="tel" name="phone" maxlength="40" autocomplete="tel"></label>' : ''}
-${L.askMessage ? '<label><span>How can we help? <span class="opt">(optional)</span></span><textarea name="message" maxlength="3000" rows="4"></textarea></label>' : ''}
-${L.consent ? `<label class="check"><input type="checkbox" name="consent" value="yes" required><span>${esc(L.consent)}</span></label>` : ''}
-<button type="submit">${esc(L.button)}</button>
-<p class="lead-status" role="status" aria-live="polite"></p>
-</form>
-<p class="lead-done" tabindex="-1" hidden>${esc(L.thankYou)}</p>
-</div>
-</div></section>`;
 
   // Posts
   for (const p of posts) {
@@ -309,8 +383,8 @@ ${p.tags.length ? tagLinks(p) : ''}
 </div>
 </article>
 </div>
-${leadBlock(p)}
-${related.length ? `<div class="wrap related"><h2>Keep reading</h2><ol class="index">${related.map((r) => indexItem(r, 'h3')).join('\n')}</ol></div>` : ''}`;
+${ctaSection(p)}
+${related.length ? `<div class="wrap related"><h2 class="section-title">Keep reading</h2><div class="grid">${related.map((r) => card(r, 'h3')).join('\n')}</div></div>` : ''}`;
     const published = `${p.date}T00:00:00Z`;
     await write(
       `blog/${p.slug}/index.html`,

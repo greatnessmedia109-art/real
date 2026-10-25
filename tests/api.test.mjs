@@ -200,3 +200,17 @@ test('login lockout after repeated failures', async () => {
   const stillOk = await call('POST', '/api/login', { body: OWNER, ip: '8.8.8.8' });
   assert.equal(stillOk.status, 429, 'locked client cannot guess even with the right password');
 });
+
+test('newsletter signup needs only an email and is labelled', async () => {
+  const before = emails.length;
+  const r = await call('POST', '/api/lead', { body: { type: 'newsletter', email: 'news@example.com', consent: 'yes' }, ip: '9.9.9.1' });
+  assert.equal(r.status, 200);
+  assert.equal(emails.length, before + 1);
+  assert.match(emails[emails.length - 1].subject, /newsletter signup/);
+  const list = await call('GET', '/api/leads', { cookie: ownerCookie });
+  const item = list.data.items.find((l) => l.email === 'news@example.com');
+  assert.equal(item.type, 'newsletter');
+  assert.equal(item.message, 'Newsletter signup');
+  const bad = await call('POST', '/api/lead', { body: { type: 'consultation', email: 'x@example.com' }, ip: '9.9.9.2' });
+  assert.equal(bad.status, 400, 'a consultation request still needs a name');
+});

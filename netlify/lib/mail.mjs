@@ -6,7 +6,9 @@ export const emailConfigured = () => Boolean(env('RESEND_API_KEY') && env('LEAD_
 
 export async function sendLeadEmail(lead, siteUrl) {
   if (!emailConfigured()) return false;
+  const kind = lead.type === 'newsletter' ? 'newsletter signup' : 'consultation request';
   const rows = [
+    ['Type', kind],
     ['Name', lead.name],
     ['Email', lead.email],
     ['Phone', lead.phone],
@@ -27,7 +29,7 @@ export async function sendLeadEmail(lead, siteUrl) {
         from: env('LEAD_FROM_EMAIL') || 'Blog leads <onboarding@resend.dev>',
         to: env('LEAD_NOTIFY_EMAIL').split(',').map((s) => s.trim()).filter(Boolean),
         reply_to: lead.email,
-        subject: `New lead: ${lead.name}${lead.postTitle ? ` (${lead.postTitle})` : ''}`.slice(0, 200),
+        subject: `New ${kind}: ${lead.name}${lead.postTitle ? ` (${lead.postTitle})` : ''}`.slice(0, 200),
         text,
         html,
       }),
