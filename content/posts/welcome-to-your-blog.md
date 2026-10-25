@@ -1,9 +1,12 @@
 ---
 title: Welcome to your new blog
-description: A short tour of how posts, tags and the lead form work, so you can delete this post and publish your own.
+description: >-
+  A short tour of how posts, tags and the lead form work, so you can delete this
+  post and publish your own.
 date: '2026-10-25'
 tags:
   - Getting started
+cover: /uploads/2026/10/alkos-logo-1-e728f4.webp
 draft: false
 ---
 This is a sample post. Everything you see here was written in the admin panel and saved to your GitHub repository, which is how the site stays fast and easy for search engines to read.
