@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Revenue Leak Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+html{color-scheme:light dark}body{margin:0}
+
+/* Layout concept: one long working page. Inputs on top with a sticky running total, then the report beneath (headline gain, chart, ranked fixes, lead form). */
+:root{
+  --bg:#F2F5F2; --surface:#FFFFFF; --surface2:#E8EEE9; --line:#D3DCD5;
+  --ink:#0F1F1A; --muted:#51655D;
+  --accent:#F2A900; --on-accent:#1A1300; --accent-ink:#8A5A00;
+  --good:#0B7A4B; --warn:#B4540A; --bad:#B42318;
+  --display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1512; --surface:#131F1B; --surface2:#1A2924; --line:#2A3B35;
+    --ink:#E8F0EC; --muted:#9AAEA6;
+    --accent:#FFC83D; --on-accent:#1A1300; --accent-ink:#FFC83D;
+    --good:#46C98B; --warn:#F59A55; --bad:#FF8A7A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1512; --surface:#131F1B; --surface2:#1A2924; --line:#2A3B35;
+  --ink:#E8F0EC; --muted:#9AAEA6;
+  --accent:#FFC83D; --on-accent:#1A1300; --accent-ink:#FFC83D;
+  --good:#46C98B; --warn:#F59A55; --bad:#FF8A7A; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font:400 16px/1.55 var(--body);
+  padding-block:20px 72px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-font-smoothing:antialiased;
+}
+p,h1,h2,h3,dl,dd,dt,ol,ul{margin:0}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:4px}
+.brand{font:800 20px var(--display);letter-spacing:-.01em}
+.tag{font-size:13px;color:var(--muted)}
+h1{font:800 clamp(30px,6.4vw,52px)/1.04 var(--display);letter-spacing:-.02em;text-wrap:balance}
+h2{font:800 22px/1.2 var(--display);letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--muted);max-width:60ch;margin-top:12px}
+.hint{color:var(--muted);font-size:14px;max-width:62ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:20px;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{font-weight:600;font-size:14px}
+.field input,.field select{
+  width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--ink);font:500 16px var(--body);min-width:0;
+}
+.field input:focus-visible,.field select:focus-visible,.btn:focus-visible,summary:focus-visible,.check input:focus-visible,a:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.help{font-size:13px;color:var(--muted)}
+.btn{
+  background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:12px 20px;
+  font:600 15px var(--body);cursor:pointer;min-height:46px;
+}
+.btn:hover{filter:brightness(1.05)}
+.btn:disabled{opacity:.6;cursor:progress}
+.btn.quiet{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;min-height:40px;padding:8px 14px}
+.scanrow{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.scanrow .field{flex:1 1 240px}
+.status{font-size:14px;color:var(--muted);min-height:1.4em}
+.status.err{color:var(--bad)}
+.status.ok{color:var(--good)}
+.scanhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.pill{display:inline-block;font:600 12px var(--body);letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.pill.ex{color:var(--accent-ink)}
+.pill.ok{color:var(--good)}
+.pill.hi{color:var(--bad)}
+.pill.md{color:var(--warn)}
+.pill.lo{color:var(--muted)}
+.scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px}
+.score{--c:var(--muted);display:flex;flex-direction:column;gap:2px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.score.good{--c:var(--good)} .score.mid{--c:var(--warn)} .score.bad{--c:var(--bad)}
+.score b{font:500 28px/1 var(--mono);color:var(--c)}
+.score span{font-size:13px;color:var(--muted)}
+.score i{display:block;height:4px;background:var(--surface2);border-radius:2px;position:relative;margin-top:6px;overflow:hidden}
+.score i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--v);background:var(--c)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.metrics div{display:flex;flex-direction:column;gap:2px}
+.metrics dt{font-size:13px;color:var(--muted)}
+.metrics dd{font:500 18px var(--mono)}
+.metrics dd.good{color:var(--good)} .metrics dd.mid{color:var(--warn)} .metrics dd.bad{color:var(--bad)}
+.derived{font-size:14px;background:var(--surface2);border-radius:8px;padding:12px 14px}
+.derived.err{color:var(--bad)}
+.groups{display:flex;flex-direction:column;gap:20px}
+.group h3{font:600 13px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:8px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:15px;line-height:1.4;min-width:0}
+.check input{margin-top:3px;width:18px;height:18px;flex:none;accent-color:var(--accent-ink)}
+.check:has(input:not(:checked)){border-color:var(--warn)}
+.live{
+  position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 16px;
+  box-shadow:0 6px 24px rgba(0,0,0,.18);
+}
+.live small{display:block;font-size:12px;opacity:.8}
+.live strong{font:800 22px/1.1 var(--display)}
+.live a{color:var(--bg);font-size:14px;font-weight:600}
+.hero{gap:20px}
+.eyebrow{font:600 12px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.big{font:800 clamp(44px,12vw,88px)/1 var(--display);letter-spacing:-.025em;display:inline-block;
+  background:linear-gradient(transparent 64%,color-mix(in srgb,var(--accent) 60%,transparent) 64%);padding-right:6px}
+.heroline{display:flex;flex-direction:column;gap:8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.stat{background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:2px}
+.stat span{font-size:13px;color:var(--muted)}
+.stat b{font:500 20px var(--mono)}
+.levers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:16px}
+.lever b{font:500 24px var(--mono);color:var(--accent-ink)}
+.lever span{display:block;font-size:14px;color:var(--muted)}
+.legend{font-size:14px;color:var(--muted);display:flex;gap:6px 18px;flex-wrap:wrap}
+.legend b{font:500 14px var(--mono);color:var(--ink)}
+#chart{width:100%;min-width:0}
+#chart svg{display:block;max-width:100%;height:auto}
+.cg{stroke:var(--line);stroke-width:1}
+.ct{fill:var(--muted);font:11px var(--mono)}
+.cb{fill:var(--accent);fill-opacity:.28;stroke:none}
+.cl{fill:none;stroke:var(--accent-ink);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.cd{fill:none;stroke:var(--accent-ink);stroke-opacity:.55;stroke-width:1;stroke-dasharray:3 3}
+.cdot{fill:var(--accent-ink);stroke:var(--surface);stroke-width:2}
+.issue{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;padding:16px 0;border-top:1px solid var(--line)}
+.issue:first-child{border-top:0;padding-top:0}
+.ibody{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ititle{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600}
+.iwhy,.ifix{font-size:15px}
+.ifix b{font-weight:600}
+.isrc{font-size:12px;color:var(--muted)}
+.igain{text-align:right;display:flex;flex-direction:column;align-items:flex-end}
+.igain span{font:500 18px var(--mono);color:var(--accent-ink);white-space:nowrap}
+.igain small{font-size:12px;color:var(--muted)}
+.note{font-size:13px;color:var(--muted)}
+details.method{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:0}
+details.method summary{padding:16px 20px;cursor:pointer;font-weight:600}
+.methodbody{padding:0 20px 20px;display:flex;flex-direction:column;gap:12px;font-size:15px}
+.methodbody ul{padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.methodbody code{font:500 13px var(--mono);background:var(--surface2);padding:2px 6px;border-radius:4px;overflow-wrap:anywhere}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{font-weight:600;color:var(--muted);background:var(--surface2)}
+td.n{font-family:var(--mono)}
+tr:last-child td{border-bottom:0}
+.leadcard{background:var(--surface2)}
+.leadcard form{display:flex;flex-direction:column;gap:14px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;margin-right:8px;vertical-align:-1px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+@media (max-width:520px){.card{padding:16px}.issue{grid-template-columns:minmax(0,1fr)}.igain{align-items:flex-start;text-align:left;flex-direction:row;gap:6px;align-items:baseline}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Alkos Media</div>
+    <div class="tag">Website audit for event businesses</div>
+  </header>
+
+  <section>
+    <h1>What is your website costing you?</h1>
+    <p class="lede">Scan your site, enter your own numbers, and see an estimate of the extra enquiries and bookings you could add over the next 12 months by fixing what is holding it back.</p>
+  </section>
+
+  <div class="stack" id="inputs">
+    <section class="card" aria-labelledby="h-site">
+      <h2 id="h-site">Your website</h2>
+      <p class="hint">We run Google's free Lighthouse test on the phone version of your site and list what it finds.</p>
+      <form id="scanform" class="scanrow" novalidate>
+        <div class="field">
+          <label for="url">Website address</label>
+          <input id="url" type="text" inputmode="url" autocomplete="url" placeholder="yourbusiness.in">
+        </div>
+        <button class="btn" id="scanbtn" type="submit">Scan my site</button>
+      </form>
+      <p class="status" id="scanstatus" role="status" aria-live="polite"></p>
+      <p class="note" id="lognote" hidden>The address you scan is recorded so we can follow up with you.</p>
+      <div id="scanout" class="stack" style="gap:14px"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-num">
+      <h2 id="h-num">Your numbers</h2>
+      <p class="hint">Example figures are filled in. Replace them with yours.</p>
+      <div class="grid2">
+        <div class="field"><label for="visitors">Website visitors per month</label>
+          <input id="visitors" type="number" min="0" step="50" inputmode="numeric" value="2000">
+          <span class="help">Users in the last 30 days, from Google Analytics.</span></div>
+        <div class="field"><label for="enq">Enquiries per month</label>
+          <input id="enq" type="number" min="0" step="1" inputmode="numeric" value="20">
+          <span class="help">Forms, calls and WhatsApp messages added together.</span></div>
+        <div class="field"><label for="close">Enquiries that become bookings (%)</label>
+          <input id="close" type="number" min="0" max="100" step="1" inputmode="numeric" value="20">
+          <span class="help">Out of every 100 enquiries, how many book?</span></div>
+        <div class="field"><label for="value">Average booking value ($)</label>
+          <input id="value" type="number" min="0" step="100" inputmode="numeric" value="2500">
+          <span class="help">What a typical event brings in.</span></div>
+      </div>
+      <p class="derived" id="derived"></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-chk">
+      <h2 id="h-chk">What your site already has</h2>
+      <p class="hint">A scan cannot see these. Tick what you have. Anything unticked is counted as a gap.</p>
+      <div class="groups" id="checks"></div>
+    </section>
+
+    <div class="live" id="live">
+      <div><small>Extra revenue in 12 months, expected case</small><strong id="livevalue">...</strong></div>
+      <a href="#results">See the breakdown</a>
+    </div>
+  </div>
+
+  <section class="stack" id="results" aria-label="Your estimate">
+    <div class="card hero" id="hero"></div>
+
+    <section class="card" id="chartcard" aria-labelledby="h-chart">
+      <h2 id="h-chart">Extra revenue, month by month</h2>
+      <p class="legend" id="legend"></p>
+      <div id="chart"></div>
+      <p class="note">Running total of extra revenue compared with today. M means month. Fixes are assumed to take effect over the first three months.</p>
+    </section>
+
+    <section class="card" id="issuescard" aria-labelledby="h-issues">
+      <h2 id="h-issues">What to fix first</h2>
+      <p class="hint">Ranked by how much each fix adds on its own in the expected case. The amounts overlap, so they do not add up to the total above.</p>
+      <div id="issues"></div>
+    </section>
+
+    <details class="method" id="method">
+      <summary>How this estimate is calculated</summary>
+      <div class="methodbody" id="methodbody"></div>
+    </details>
+
+    <section class="card leadcard" id="leadcard" aria-labelledby="h-lead">
+      <h2 id="h-lead">Get the fix plan for your site</h2>
+      <p class="hint">Leave your details and we will send this report with a step-by-step plan in plain language.</p>
+      <form id="leadform" novalidate>
+        <div class="grid2">
+          <div class="field"><label for="lname">Your name</label><input id="lname" type="text" autocomplete="name"></div>
+          <div class="field"><label for="lcontact">WhatsApp number or email</label><input id="lcontact" type="text" autocomplete="email"></div>
+          <div class="field"><label for="lbiz">Type of business</label>
+            <select id="lbiz">
+              <option>Wedding planner</option><option>Event agency</option><option>Venue</option>
+              <option>Decor or catering</option><option>Photographer or videographer</option><option>Other</option>
+            </select></div>
+        </div>
+        <div><button class="btn" type="submit" id="leadbtn">Send me the plan</button></div>
+        <p class="status" id="leadstatus" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ------------------------------------------------------------------
+   CONFIG. Set these when you host the page on your own site.
+   LEAD_ENDPOINT: a Formspree or Web3Forms URL that accepts JSON.
+   LEAD_EXTRA: extra fields the service needs, e.g. {access_key:'...'}.
+   PSI_API_KEY: optional Google API key (restrict it to your domain).
+   SCAN_LOG_ENDPOINT: optional Google Apps Script web app URL that
+   records every scanned address in a Google Sheet.
+------------------------------------------------------------------- */
+const CONFIG={LEAD_ENDPOINT:'',LEAD_EXTRA:{},PSI_API_KEY:'AIzaSyAYhbgo4Ey1ffegjj5HrUsmIgQlYoCMhbc',SCAN_LOG_ENDPOINT:''};
+const PSI='https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+
+/* ------------------------------------------------------------------
+   MODEL. Every uplift below is a planning assumption, not a measured
+   result. up = [low, expected, high] as a fraction of the lever it
+   affects (conv = visitors who enquire, traffic = visitors, close =
+   enquiries that book). Edit these numbers here, nowhere else.
+------------------------------------------------------------------- */
+const CAPS={conv:.5,traffic:.35,close:.25};
+const RAMP=[.25,.6,1,1,1,1,1,1,1,1,1,1];
+const RAMP_SUM=RAMP.reduce((a,b)=>a+b,0);
+const has=(s,id)=>s.fails.indexOf(id)>-1;
+
+const CATALOG=[
+ {id:'lcp',src:'scan',lever:'conv',title:'Slow to load on phones',
+  detect:s=>s.lcp>4000?1:s.lcp>2500?.5:0,
+  why:s=>'The main content appears after '+(s.lcp/1000).toFixed(1)+' seconds on a mobile connection. Google\'s target is 2.5 seconds or less.',
+  fix:'Compress photos, serve them as WebP, and remove scripts you do not use.',up:[.02,.05,.10]},
+ {id:'cls',src:'scan',lever:'conv',title:'Page jumps while loading',
+  detect:s=>s.cls>.25?1:s.cls>.1?.5:0,
+  why:s=>'The layout shift score is '+s.cls.toFixed(2)+'. A score of 0.1 or less feels stable.',
+  fix:'Set width and height on images and reserve space for banners and embedded videos.',up:[.01,.02,.04]},
+ {id:'tbt',src:'scan',lever:'conv',title:'Slow to respond to taps',
+  detect:s=>s.tbt>600?1:s.tbt>200?.5:0,
+  why:s=>'The page is busy for '+Math.round(s.tbt)+' ms while loading scripts, so taps feel delayed.',
+  fix:'Remove heavy sliders, chat widgets and tracking scripts that do not earn their place.',up:[.01,.02,.04]},
+ {id:'viewport',src:'scan',lever:'conv',title:'Not set up for mobile screens',
+  detect:s=>has(s,'viewport')?1:0,
+  why:()=>'The page has no mobile viewport setting, so phones show a shrunken desktop page.',
+  fix:'Add the viewport tag and switch to a responsive layout.',up:[.06,.14,.25]},
+ {id:'tap',src:'scan',lever:'conv',title:'Buttons and text are hard to use on a phone',
+  detect:s=>(has(s,'tap-targets')||has(s,'target-size'))&&has(s,'font-size')?1:(has(s,'tap-targets')||has(s,'target-size')||has(s,'font-size'))?.5:0,
+  why:()=>'Tap targets or text sizes are too small on mobile screens.',
+  fix:'Make buttons at least 48 px tall and body text at least 16 px.',up:[.02,.04,.07]},
+ {id:'https',src:'scan',lever:'conv',title:'Browsers show a "Not secure" warning',
+  detect:s=>has(s,'is-on-https')?1:0,
+  why:()=>'The site is not served over HTTPS, so visitors see a warning before they can enquire.',
+  fix:'Install a free SSL certificate and redirect all pages to HTTPS.',up:[.02,.05,.10]},
+ {id:'title',src:'scan',lever:'traffic',title:'Page has no title',
+  detect:s=>has(s,'document-title')?1:0,
+  why:()=>'Without a title, Google has nothing clear to show in search results.',
+  fix:'Write a unique title for each page with the service and city.',up:[.02,.06,.12]},
+ {id:'meta',src:'scan',lever:'traffic',title:'No search description',
+  detect:s=>has(s,'meta-description')?1:0,
+  why:()=>'Without a description, Google picks random page text for your listing, which lowers clicks.',
+  fix:'Write a 140 to 160 character description with a reason to click.',up:[.01,.04,.08]},
+ {id:'crawl',src:'scan',lever:'traffic',title:'Google is told not to list the page',
+  detect:s=>has(s,'is-crawlable')?1:0,
+  why:()=>'The page carries a setting that stops search engines from indexing it.',
+  fix:'Remove the noindex tag or the robots block.',up:[.15,.35,.60]},
+ {id:'alt',src:'scan',lever:'traffic',title:'Photos have no descriptions',
+  detect:s=>has(s,'image-alt')?1:0,
+  why:()=>'Event photos without alt text miss out on Google Images and cannot be read by screen readers.',
+  fix:'Add short descriptions, such as "Floral mandap at an outdoor wedding".',up:[.005,.02,.04]},
+ {id:'links',src:'scan',lever:'traffic',title:'Links say "click here"',
+  detect:s=>has(s,'link-text')?1:0,
+  why:()=>'Vague link text gives search engines no clue what the linked page is about.',
+  fix:'Use link text that names the page, such as "Wedding decor packages".',up:[.005,.015,.03]},
+ {id:'setup',src:'scan',lever:'traffic',title:'Search setup errors',
+  detect:s=>(has(s,'canonical')||has(s,'robots-txt'))?1:0,
+  why:()=>'A canonical tag or robots.txt file is invalid, which can confuse search engines.',
+  fix:'Fix the canonical URL and make sure robots.txt is valid.',up:[.01,.02,.05]},
+
+ {id:'cta',src:'self',lever:'conv',group:0,on:true,label:'A clear button such as "Check availability" on the first screen',
+  title:'No clear call to action on the first screen',why:'Visitors who cannot see the next step leave without enquiring.',
+  fix:'Add one primary button in the header and at the top of every page.',up:[.04,.09,.18]},
+ {id:'form',src:'self',lever:'conv',group:0,on:false,label:'Enquiry form asks for event date, city and guest count',
+  title:'Enquiry form is not built around the event',why:'A generic contact form gets fewer and weaker enquiries than a form that starts with the event.',
+  fix:'Replace it with a short form: date, city, guests and budget range.',up:[.05,.12,.22]},
+ {id:'whatsapp',src:'self',lever:'conv',group:0,on:false,label:'WhatsApp chat button visible on phones',
+  title:'No WhatsApp button on mobile',why:'Many event buyers would rather send a message than fill in a form.',
+  fix:'Add a floating WhatsApp button with a pre-filled message.',up:[.04,.08,.15]},
+ {id:'call',src:'self',lever:'conv',group:0,on:true,label:'Phone number that calls when tapped',
+  title:'Phone number is not tap-to-call',why:'On a phone, a number that cannot be tapped adds a step.',
+  fix:'Link the number with a tel: link in the header and footer.',up:[.01,.03,.06]},
+ {id:'gallery',src:'self',lever:'conv',group:0,on:true,label:'Portfolio of real events with photos or video',
+  title:'No portfolio of real events',why:'Buyers want proof you can deliver their kind of event before they get in touch.',
+  fix:'Add a gallery of recent events, grouped by event type.',up:[.03,.07,.13]},
+ {id:'reviews',src:'self',lever:'conv',group:0,on:false,label:'Client reviews or testimonials on the site',
+  title:'No client reviews on the site',why:'Without reviews, visitors have nothing to compare you against other vendors with.',
+  fix:'Add 6 to 10 real reviews with names, event type and photos.',up:[.02,.05,.09]},
+ {id:'price',src:'self',lever:'conv',group:0,on:true,label:'Starting price or packages shown',
+  title:'No starting price or packages',why:'Visitors who cannot judge whether you fit their budget tend to leave rather than ask.',
+  fix:'Show packages with a "starting from" price.',up:[.02,.06,.11]},
+
+ {id:'gbp',src:'self',lever:'traffic',group:1,on:true,label:'Google Business Profile claimed, with recent reviews',
+  title:'Google Business Profile is weak',why:'Searches like "wedding planner near me" show map listings before websites.',
+  fix:'Claim the profile, add photos, and ask recent clients for reviews.',up:[.05,.12,.25]},
+ {id:'pages',src:'self',lever:'traffic',group:1,on:true,label:'Separate pages for each service and city',
+  title:'No separate pages per service and city',why:'One page cannot rank for every service in every city.',
+  fix:'Create one page for each service and city you want to be found in.',up:[.04,.10,.20]},
+ {id:'content',src:'self',lever:'traffic',group:1,on:true,label:'Planning guides or blog posts that answer buyers\' questions',
+  title:'No planning guides or blog',why:'Buyers search for costs and checklists long before they pick a vendor.',
+  fix:'Publish guides such as "Wedding decor cost guide" and keep them updated.',up:[.03,.07,.15]},
+
+ {id:'reply',src:'self',lever:'close',group:2,on:false,label:'Every enquiry gets a reply within an hour',
+  title:'Slow replies to enquiries',why:'Buyers contact several vendors and tend to book whoever answers first.',
+  fix:'Set an auto-reply and assign someone to answer within an hour.',up:[.04,.09,.15]},
+ {id:'followup',src:'self',lever:'close',group:2,on:true,label:'Unanswered enquiries get a follow-up within 3 days',
+  title:'No follow-up after the first reply',why:'Many enquiries go quiet only because the buyer got busy.',
+  fix:'Send one follow-up message after 2 to 3 days.',up:[.03,.06,.10]}
+];
+const GROUPS=['Turning visitors into enquiries','Being found on Google','Winning the enquiry'];
+
+function levers(list,s){
+  const prod={conv:1,traffic:1,close:1};
+  list.forEach(p=>{prod[p.lever]*=(1-p.up[s]*p.sev);});
+  const o={};
+  Object.keys(prod).forEach(k=>{o[k]=Math.min(CAPS[k],1-prod[k]);});
+  return o;
+}
+function model(inp,lv){
+  const enq=inp.enq*(1+lv.traffic)*(1+lv.conv);
+  const close=Math.max(inp.close,Math.min(.9,inp.close*(1+lv.close)));
+  const bookings=enq*close;
+  return {enq:enq,close:close,bookings:bookings,rev:bookings*inp.value};
+}
+function calc(inp,list){
+  const base={bookings:inp.enq*inp.close,rev:inp.enq*inp.close*inp.value};
+  const sc=[0,1,2].map(s=>{
+    const lv=levers(list,s), m=model(inp,lv);
+    const cum=[];let run=0;
+    for(let i=0;i<12;i++){run+=(m.rev-base.rev)*RAMP[i];cum.push(run);}
+    return {lv:lv,m:m,cum:cum,extraYear:run,extraBookings:(m.bookings-base.bookings)*RAMP_SUM};
+  });
+  return {base:base,sc:sc};
+}
+const nf=new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
+function money(n){return '$'+nf.format(Math.round(n));}
+function trimNum(x){const d=x>=100?0:x>=10?1:2;return String(parseFloat(x.toFixed(d)));}
+function moneyShort(n){
+  const a=Math.abs(n),sg=n<0?'-':'';
+  if(a>=1e6)return sg+'$'+trimNum(a/1e6)+' million';
+  return sg+money(a);
+}
+function axisMoney(v){
+  if(v>=1e6)return '$'+trimNum(v/1e6)+'M';
+  if(v>=1e3)return '$'+trimNum(v/1e3)+'k';
+  return '$'+Math.round(v);
+}
+function scaleTicks(v){
+  const raw=(v||1)/4,p=Math.pow(10,Math.floor(Math.log10(raw))),n=raw/p;
+  const s=(n<=1?1:n<=2?2:n<=5?5:10)*p,max=Math.ceil(v/s)*s,ticks=[];
+  for(let t=0;t<=max+1e-9;t+=s)ticks.push(t);
+  return {max:max,ticks:ticks};
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const EXAMPLE_SCAN={url:'example-events.in',scores:{perf:38,seo:83,a11y:79,bp:74},lcp:5200,cls:.18,tbt:740,
+  fails:['meta-description','image-alt','target-size']};
+
+function parseScan(d,u){
+  const lr=d&&d.lighthouseResult;
+  if(!lr)throw new Error('nodata');
+  const a=lr.audits||{},c=lr.categories||{};
+  const sc=k=>Math.round((((c[k]||{}).score)||0)*100);
+  const ids=['viewport','meta-description','document-title','is-crawlable','image-alt','link-text','is-on-https','tap-targets','target-size','font-size','canonical','robots-txt'];
+  const num=id=>((a[id]||{}).numericValue)||0;
+  return {url:lr.finalUrl||u,scores:{perf:sc('performance'),seo:sc('seo'),a11y:sc('accessibility'),bp:sc('best-practices')},
+    lcp:num('largest-contentful-paint'),cls:num('cumulative-layout-shift'),tbt:num('total-blocking-time'),
+    fails:ids.filter(id=>a[id]&&a[id].score===0)};
+}
+/*__DOM__*/
+const $=id=>document.getElementById(id);
+let scan=EXAMPLE_SCAN,scanIsExample=true,lastCum=null;
+
+function buildChecks(){
+  const el=$('checks');
+  el.innerHTML=GROUPS.map((g,gi)=>'<div class="group"><h3>'+g+'</h3><div class="checks">'+
+    CATALOG.filter(p=>p.src==='self'&&p.group===gi).map(p=>
+      '<label class="check"><input type="checkbox" id="c-'+p.id+'"'+(p.on?' checked':'')+'><span>'+p.label+'</span></label>').join('')+
+    '</div></div>').join('');
+  el.addEventListener('change',render);
+}
+function buildMethod(){
+  const lev={conv:'Visitors who enquire',traffic:'Visitors from search',close:'Enquiries that book'};
+  const rows=CATALOG.map(p=>'<tr><td>'+p.title+'</td><td>'+lev[p.lever]+'</td><td class="n">+'+(p.up[0]*100).toFixed(p.up[0]<.01?1:0)+'%</td><td class="n">+'+(p.up[1]*100).toFixed(p.up[1]<.01?1:0)+'%</td><td class="n">+'+(p.up[2]*100).toFixed(0)+'%</td></tr>').join('');
+  $('methodbody').innerHTML=
+   '<p>Your current revenue from the website is <code>enquiries × booking rate × average booking value</code>.</p>'+
+   '<p>Each problem has a low, expected and high improvement on one of three things: how many people find you, how many of them enquire, and how many enquiries book. Fixes overlap, so they are combined as <code>1 − (1 − a)(1 − b)(1 − c)…</code> rather than added, and each group is capped at +'+(CAPS.traffic*100)+'% for visitors, +'+(CAPS.conv*100)+'% for enquiries and +'+(CAPS.close*100)+'% for bookings.</p>'+
+   '<ul><li>Fixes take effect gradually: 25% of the gain in month 1, 60% in month 2 and all of it from month 3.</li>'+
+   '<li>Demand is assumed flat across the year. Event businesses have peak seasons, so real months will vary.</li>'+
+   '<li>The percentages are planning assumptions, not measured results from specific businesses. Results depend on your market, your season and how well the fixes are done.</li></ul>'+
+   '<div class="tablewrap"><table><thead><tr><th>Problem</th><th>Affects</th><th>Low</th><th>Expected</th><th>High</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function renderScan(){
+  const out=$('scanout');
+  if(!scan){out.innerHTML='';return;}
+  const state=n=>n>=90?'good':n>=50?'mid':'bad';
+  const head=scanIsExample
+    ?'<span class="pill ex">Example scan</span><span>Sample results so you can see the report. Scan your own site to replace them.</span>'
+    :'<span class="pill ok">Live scan</span><span>'+esc(scan.url)+', on a mobile connection</span>';
+  const sc=[['perf','Speed'],['seo','Search'],['a11y','Accessibility'],['bp','Best practice']];
+  const met=(l,v,s)=>'<div><dt>'+l+'</dt><dd class="'+s+'">'+v+'</dd></div>';
+  out.innerHTML='<div class="scanhead">'+head+'</div>'+
+    '<div class="scores">'+sc.map(x=>'<div class="score '+state(scan.scores[x[0]])+'"><b>'+scan.scores[x[0]]+'</b><span>'+x[1]+'</span><i style="--v:'+scan.scores[x[0]]+'%"></i></div>').join('')+'</div>'+
+    '<dl class="metrics">'+
+      met('Main content appears',(scan.lcp/1000).toFixed(1)+' s',scan.lcp>4000?'bad':scan.lcp>2500?'mid':'good')+
+      met('Layout shift',scan.cls.toFixed(2),scan.cls>.25?'bad':scan.cls>.1?'mid':'good')+
+      met('Busy while loading',Math.round(scan.tbt)+' ms',scan.tbt>600?'bad':scan.tbt>200?'mid':'good')+
+    '</dl>';
+}
+function getInputs(){
+  const n=id=>{const v=parseFloat($(id).value);return isFinite(v)&&v>0?v:0;};
+  return {visitors:n('visitors'),enq:n('enq'),close:Math.min(1,n('close')/100),value:n('value')};
+}
+function activeProblems(){
+  const list=[];
+  if(scan)CATALOG.filter(p=>p.src==='scan').forEach(p=>{const sev=p.detect(scan);if(sev>0)list.push(Object.assign({},p,{sev:sev}));});
+  CATALOG.filter(p=>p.src==='self').forEach(p=>{const c=$('c-'+p.id);if(c&&!c.checked)list.push(Object.assign({},p,{sev:1}));});
+  return list;
+}
+let lastResult=null;
+function render(){
+  const inp=getInputs(),der=$('derived');
+  let msg='',ok=true;
+  if(!inp.visitors||!inp.enq||!inp.close||!inp.value){ok=false;msg='Fill in all four numbers to see your estimate.';}
+  else if(inp.enq>inp.visitors){ok=false;msg='Enquiries cannot be higher than visitors. Check the two numbers.';}
+  der.className='derived'+(ok?'':' err');
+  ['chartcard','issuescard','method','leadcard'].forEach(id=>{$(id).hidden=!ok;});
+  if(!ok){
+    der.textContent=msg;$('hero').innerHTML='<p>'+msg+'</p>';$('livevalue').textContent='Waiting for your numbers';lastResult=null;return;
+  }
+  const list=activeProblems(),r=calc(inp,list),ex=r.sc[1];
+  lastResult={inp:inp,list:list,r:r};
+  der.textContent=(inp.enq/inp.visitors*100).toFixed(1)+'% of visitors enquire. Your website brings in about '+r.base.bookings.toFixed(1)+' bookings and '+money(r.base.rev)+' a month today, which is '+moneyShort(r.base.rev*12)+' a year.';
+  $('livevalue').textContent=list.length?'+'+moneyShort(ex.extraYear):'Nothing to fix yet';
+
+  const lvl=ex.lv,pct=v=>'+'+Math.round(v*100)+'%';
+  $('hero').innerHTML=
+   '<div class="heroline"><span class="eyebrow">Estimate for the next 12 months</span>'+
+   '<div><span class="big">'+(list.length?moneyShort(ex.extraYear):'$0')+'</span></div>'+
+   '<p>more booking revenue in year one, expected case'+(list.length?', about '+Math.max(0,Math.round(ex.extraBookings))+' more bookings at '+money(inp.value)+' each':'')+'.</p>'+
+   '<p class="note">Range '+moneyShort(r.sc[0].extraYear)+' to '+moneyShort(r.sc[2].extraYear)+'. Assumes every problem listed below is fixed.</p></div>'+
+   '<div class="stats"><div class="stat"><span>Today, per year</span><b>'+moneyShort(r.base.rev*12)+'</b></div>'+
+   '<div class="stat"><span>With fixes, year one</span><b>'+moneyShort(r.base.rev*12+ex.extraYear)+'</b></div>'+
+   '<div class="stat"><span>Per month once fixed</span><b>'+moneyShort(ex.m.rev)+'</b></div></div>'+
+   '<div class="levers"><div class="lever"><b>'+pct(lvl.traffic)+'</b><span>more visitors from search</span></div>'+
+   '<div class="lever"><b>'+pct(lvl.conv)+'</b><span>more visitors who enquire</span></div>'+
+   '<div class="lever"><b>'+pct(lvl.close)+'</b><span>more enquiries that book</span></div></div>';
+
+  $('legend').innerHTML='<span>Expected <b>'+moneyShort(ex.extraYear)+'</b></span><span>Low <b>'+moneyShort(r.sc[0].extraYear)+'</b></span><span>High <b>'+moneyShort(r.sc[2].extraYear)+'</b></span>';
+  lastCum=[r.sc[0].cum,r.sc[1].cum,r.sc[2].cum];
+  drawChart();
+
+  const items=list.map(p=>{
+    const rest=list.filter(x=>x!==p),m=model(inp,levers(rest,1));
+    return {p:p,gain:Math.max(0,(ex.m.rev-m.rev)*RAMP_SUM)};
+  }).sort((a,b)=>b.gain-a.gain);
+  const tot=items.reduce((s,x)=>s+x.gain,0)||1;
+  if(!items.length){
+    $('issues').innerHTML='<p>No gaps found with the information given.'+(scan?'':' Run a scan to check page speed and search setup.')+'</p>';
+  }else{
+    $('issues').innerHTML=items.map(x=>{
+      const sh=x.gain/tot,cls=sh>=.25?'hi':sh>=.1?'md':'lo',lab=sh>=.25?'High':sh>=.1?'Medium':'Low';
+      const why=typeof x.p.why==='function'?x.p.why(scan):x.p.why;
+      return '<div class="issue"><div class="ibody"><div class="ititle"><span>'+x.p.title+'</span><span class="pill '+cls+'">'+lab+'</span></div>'+
+        '<p class="iwhy">'+why+'</p><p class="ifix"><b>Fix:</b> '+x.p.fix+'</p>'+
+        '<p class="isrc">'+(x.p.src==='scan'?'Found by the scan'+(scanIsExample?' (example)':''):'From your answers')+'</p></div>'+
+        '<div class="igain"><span>+'+moneyShort(x.gain)+'</span><small>a year</small></div></div>';
+    }).join('');
+  }
+}
+function drawChart(){
+  const el=$('chart');
+  if(!lastCum||el.offsetParent===null&&!el.clientWidth)return;
+  const lo=lastCum[0],ex=lastCum[1],hi=lastCum[2];
+  const W=Math.max(300,Math.floor(el.clientWidth||600)),H=250,ml=48,mr=14,mt=12,mb=32;
+  const top=Math.max(hi[11],ex[11],lo[11],1),sc=scaleTicks(top);
+  const X=i=>ml+(W-ml-mr)*i/11,Y=v=>mt+(H-mt-mb)*(1-v/sc.max);
+  const pts=a=>a.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1));
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Cumulative extra revenue over 12 months. Expected '+moneyShort(ex[11])+', low '+moneyShort(lo[11])+', high '+moneyShort(hi[11])+'.">';
+  sc.ticks.forEach(t=>{const y=Y(t).toFixed(1);
+    s+='<line class="cg" x1="'+ml+'" x2="'+(W-mr)+'" y1="'+y+'" y2="'+y+'"/><text class="ct" x="'+(ml-8)+'" y="'+(+y+4)+'" text-anchor="end">'+axisMoney(t)+'</text>';});
+  [0,2,5,8,11].forEach(i=>{s+='<text class="ct" x="'+X(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle">M'+(i+1)+'</text>';});
+  s+='<path class="cb" d="M'+pts(hi).join(' L')+' L'+pts(lo).reverse().join(' L')+' Z"/>';
+  s+='<polyline class="cd" points="'+pts(hi).join(' ')+'"/><polyline class="cd" points="'+pts(lo).join(' ')+'"/>';
+  s+='<polyline class="cl" points="'+pts(ex).join(' ')+'"/>';
+  s+='<circle class="cdot" cx="'+X(11).toFixed(1)+'" cy="'+Y(ex[11]).toFixed(1)+'" r="5"/></svg>';
+  el.innerHTML=s;
+}
+
+function status(id,text,cls){const e=$(id);e.textContent=text;e.className='status'+(cls?' '+cls:'');}
+async function runScan(){
+  let u=$('url').value.trim();
+  if(!u){status('scanstatus','Enter your website address first.','err');return;}
+  if(!/^https?:\/\//i.test(u))u='https://'+u;
+  try{new URL(u);}catch(e){status('scanstatus','That address does not look right. Try something like yourbusiness.in.','err');return;}
+  const btn=$('scanbtn');btn.disabled=true;
+  $('scanstatus').className='status';
+  $('scanstatus').innerHTML='<span class="spin"></span>Scanning on a mobile connection. This takes up to 30 seconds.';
+  const qs=new URLSearchParams();qs.set('url',u);qs.set('strategy','mobile');
+  ['performance','seo','accessibility','best-practices'].forEach(c=>qs.append('category',c));
+  if(CONFIG.PSI_API_KEY)qs.set('key',CONFIG.PSI_API_KEY);
+  const ctrl=new AbortController(),t=setTimeout(()=>ctrl.abort(),75000);
+  try{
+    const res=await fetch(PSI+'?'+qs.toString(),{signal:ctrl.signal});
+    if(!res.ok)throw new Error('http'+res.status);
+    scan=parseScan(await res.json(),u);scanIsExample=false;logScan(scan);
+    renderScan();render();
+    status('scanstatus','Scan complete. The report below now uses your results.','ok');
+  }catch(e){
+    const m=String(e&&e.message);
+    status('scanstatus',
+      e&&e.name==='AbortError'?'The scan took too long. Try again in a minute.':
+      m==='http429'?'Google\'s free scan is busy right now. Try again in a minute.':
+      m==='http400'||m==='http500'?'Google could not load that address. Check that it is public and spelled correctly.':
+      'The scan could not reach Google from this page. You can still use the checklist below, or try again later.','err');
+  }finally{clearTimeout(t);btn.disabled=false;}
+}
+function logScan(s){
+  if(!CONFIG.SCAN_LOG_ENDPOINT)return;
+  try{
+    fetch(CONFIG.SCAN_LOG_ENDPOINT,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({time:new Date().toISOString(),url:s.url,speed:s.scores.perf,search:s.scores.seo,accessibility:s.scores.a11y,best_practice:s.scores.bp})}).catch(()=>{});
+  }catch(e){}
+}
+async function sendLead(ev){
+  ev.preventDefault();
+  const name=$('lname').value.trim(),contact=$('lcontact').value.trim();
+  if(!name||!contact){status('leadstatus','Add your name and a WhatsApp number or email.','err');return;}
+  if(!lastResult){status('leadstatus','Fill in your numbers first so the plan matches your site.','err');return;}
+  if(!CONFIG.LEAD_ENDPOINT){status('leadstatus','This copy is not connected to a lead inbox yet, so nothing was sent.','err');return;}
+  const L=lastResult,ex=L.r.sc[1];
+  const payload=Object.assign({subject:'New website audit lead',from_name:'Revenue Leak Audit'},CONFIG.LEAD_EXTRA,{
+    name:name,contact:contact,business_type:$('lbiz').value,website:scanIsExample?'':(scan&&scan.url)||$('url').value.trim(),
+    visitors_per_month:L.inp.visitors,enquiries_per_month:L.inp.enq,booking_rate:L.inp.close,avg_booking_value_usd:L.inp.value,
+    expected_extra_year_usd:Math.round(ex.extraYear),low_extra_year_usd:Math.round(L.r.sc[0].extraYear),high_extra_year_usd:Math.round(L.r.sc[2].extraYear),
+    problems:L.list.map(p=>p.title).join('; '),scan_scores:scanIsExample?'':JSON.stringify(scan.scores)});
+  const b=$('leadbtn');b.disabled=true;status('leadstatus','Sending...');
+  try{
+    const res=await fetch(CONFIG.LEAD_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+    if(!res.ok)throw new Error('http');
+    status('leadstatus','Thank you. Your report and plan are on the way.','ok');
+    $('leadform').reset();
+  }catch(e){status('leadstatus','Sorry, that did not send. Check your connection and try again.','err');}
+  finally{b.disabled=false;}
+}
+
+if(CONFIG.SCAN_LOG_ENDPOINT)$('lognote').hidden=false;
+buildChecks();buildMethod();renderScan();render();
+['visitors','enq','close','value'].forEach(id=>$(id).addEventListener('input',render));
+$('scanform').addEventListener('submit',e=>{e.preventDefault();runScan();});
+$('leadform').addEventListener('submit',sendLead);
+if(window.ResizeObserver){let raf=0;new ResizeObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(drawChart);}).observe($('chart'));}
+else window.addEventListener('resize',drawChart);
+</script>
+
+</body>
+</html>
