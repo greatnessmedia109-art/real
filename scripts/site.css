@@ -205,3 +205,7 @@ a:hover { text-decoration-thickness: 2px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .card-media img { transition: none; } }
 @media print { .site-head, .cta, .toc, .site-foot, .related { display: none; } body { background: #fff; color: #000; } }
+
+.hero-link { margin: 1rem 0 0; }
+.hero-link a { font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.hero-link a:hover { text-decoration-thickness: 2px; }

@@ -184,14 +184,14 @@ ${jsonld.map(ld).join('\n')}
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap">
 <a class="brand" href="/" aria-label="${esc(cfg.name)} home"><img src="/logo.png" alt="${esc(cfg.name)}" width="700" height="315"></a>
-<nav class="site-nav" aria-label="Main"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a class="nav-cta" href="/#consultation">Free consultation</a></nav>
+<nav class="site-nav" aria-label="Main"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a href="/audit/">Free website audit</a><a class="nav-cta" href="/#consultation">Free consultation</a></nav>
 </div></header>
 <main id="main">
 ${body}
 </main>
 <footer class="site-foot"><div class="wrap">
 <div class="foot-brand"><img src="/logo.png" alt="${esc(cfg.name)}" width="700" height="315" loading="lazy"><p>${esc(cfg.tagline)}</p></div>
-<nav class="foot-links" aria-label="Footer"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a href="/#consultation">Free consultation</a></nav>
+<nav class="foot-links" aria-label="Footer"><a href="/">Latest news</a><a href="/#subscribe">Newsletter</a><a href="/audit/">Free website audit</a><a href="/#consultation">Free consultation</a></nav>
 <p class="copy">${footer}</p>
 </div></footer>
 ${scripts ? `<script src="${jsPath}" defer></script>` : ''}
@@ -297,6 +297,7 @@ ${L.consent ? `<label class="check"><input type="checkbox" name="consent" value=
 <h1>${esc(heading)}</h1>
 ${intro ? `<p class="hero-text">${esc(intro)}</p>` : ''}
 <p class="hero-actions"><a class="btn" href="#consultation">Book a free consultation</a><a class="btn btn-ghost" href="#subscribe">Subscribe to the newsletter</a></p>
+<p class="hero-link"><a href="/audit/">Free website audit: see what your site is costing you &rarr;</a></p>
 </div></section>`
         : `<div class="wrap"><div class="intro"><h1>${esc(heading)}</h1>${intro ? `<p>${esc(intro)}</p>` : ''}</div></div>`;
       let listing;
@@ -449,6 +450,7 @@ ${related.length ? `<div class="wrap related"><h2 class="section-title">Keep rea
   const xml = (s) => esc(s);
   const urls = [
     { loc: abs('/'), lastmod: posts[0] ? posts[0].updated || posts[0].date : '' },
+    { loc: abs('/audit/'), lastmod: '' },
     ...[...tagMap.keys()].map((s) => ({ loc: abs(`/tag/${s}/`), lastmod: '' })),
     ...posts.map((p) => ({ loc: abs(`/blog/${p.slug}/`), lastmod: p.updated || p.date })),
   ];
