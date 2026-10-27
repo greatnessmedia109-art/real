@@ -7,7 +7,7 @@
    SCAN_LOG_ENDPOINT: optional Google Apps Script web app URL that
    records every scanned address in a Google Sheet.
 ------------------------------------------------------------------- */
-const CONFIG={LEAD_ENDPOINT:'https://api.web3forms.com/submit',LEAD_EXTRA:{access_key:'8f1ac273-af25-4540-8e9b-488fc8bcb69b',botcheck:''},PSI_API_KEY:'PASTE_YOUR_NEW_GOOGLE_KEY_HERE',SCAN_LOG_ENDPOINT:''};
+const CONFIG={LEAD_ENDPOINT:'https://api.web3forms.com/submit',LEAD_EXTRA:{access_key:'8f1ac273-af25-4540-8e9b-488fc8bcb69b',botcheck:''},PSI_API_KEY:'AIzaSyBlYrQFFgXwM2TMn6Fkao89WU3SKAb8hxY',SCAN_LOG_ENDPOINT:''};
 const PSI='https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 
 /* ------------------------------------------------------------------
