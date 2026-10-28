@@ -1,5 +1,6 @@
 ---
 title: How an Event Planning Business Can Earn More Money with SEO
+description: seo for event planning companies
 date: '2026-10-28'
 draft: false
 ---
@@ -87,3 +88,5 @@ Month 3: Publish three helpful blog posts, request reviews from past clients, an
 Final thoughts
 SEO is not a quick trick. It usually takes three to six months to see strong results. But unlike advertising, the benefits keep building: every page, review and link keeps working for you long after it is published. For an event planning business, that means a steadier flow of high-quality enquiries, less reliance on referrals, and more bookings at better prices.
 Start with local search and your service pages, stay consistent, and let your best work do the selling.
+
+![Describe the image](/uploads/2026/10/event-planning-meets-seo-growth-24d6d2.webp)
